@@ -42,12 +42,12 @@ class ViewFinalize extends Component {
         <MyHeading noTopHeader>Thanks!</MyHeading>
         <MySubHeading>{this.props.selectedContest.name}</MySubHeading>
 
-        <MySubHeading>Submitted:</MySubHeading>
+        {/* <MySubHeading>Submitted:</MySubHeading>
         <MyList
           people
           list={this.props.contestRoster.judges}
           // handleClick={this.selectContest}
-        />
+        /> */}
 
         <MyCenterButton fixed onClick={this.finalizeButton}>
           Finalize

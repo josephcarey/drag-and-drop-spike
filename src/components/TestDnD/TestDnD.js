@@ -1,23 +1,27 @@
 import React, { Component } from "react";
-import axios from "axios";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
-import {
-  Avatar,
-  Button,
-  List,
-  ListItem,
-  ListItemText,
-  Typography,
-} from "@material-ui/core";
-import ImageIcon from "@material-ui/icons/Image";
+import PropTypes from "prop-types";
+import { withStyles } from "@material-ui/core/styles";
 
-import NavbarSpacer from "../NavbarSpacer/NavbarSpacer";
+import Paper from "@material-ui/core/Paper";
+import Grid from "@material-ui/core/Grid";
+
+const styles = theme => ({
+  root: {
+    flexGrow: 1,
+  },
+  paper: {
+    padding: theme.spacing.unit * 2,
+    textAlign: "center",
+    color: theme.palette.text.secondary,
+  },
+});
 
 // fake data generator
-const getItems = count =>
+const getItems = (count, offset = 0) =>
   Array.from({ length: count }, (v, k) => k).map(k => ({
-    id: `item-${k}`,
-    content: `cool thing ${k}`,
+    id: `item-${k + offset}`,
+    content: `item ${k + offset}`,
   }));
 
 // a little function to help us with reordering the result
@@ -29,170 +33,242 @@ const reorder = (list, startIndex, endIndex) => {
   return result;
 };
 
+/**
+ * Moves an item from one list to another list.
+ */
+const move = (source, destination, droppableSource, droppableDestination) => {
+  const sourceClone = Array.from(source);
+  const destClone = Array.from(destination);
+  const [removed] = sourceClone.splice(droppableSource.index, 1);
+
+  destClone.splice(droppableDestination.index, 0, removed);
+
+  const result = {};
+  result[droppableSource.droppableId] = sourceClone;
+  result[droppableDestination.droppableId] = destClone;
+
+  return result;
+};
+
 const grid = 8;
 
 const getItemStyle = (isDragging, draggableStyle) => ({
   // some basic styles to make the items look a bit nicer
-  //   userSelect: "none",
-  //   padding: grid * 2,
-  //   margin: `0 0 ${grid}px 0`,
+  userSelect: "none",
+  padding: grid * 2,
+  margin: `0 0 ${grid}px 0`,
 
   // change background colour if dragging
-  //   background: isDragging ? "lightgreen" : "grey",
+  background: isDragging ? "lightgreen" : "grey",
 
   // styles we need to apply on draggables
   ...draggableStyle,
 });
 
 const getListStyle = isDraggingOver => ({
-  //   background: isDraggingOver ? "lightblue" : "lightgrey",
-  //   padding: grid,
-  //   width: 250,
+  background: isDraggingOver ? "lightblue" : "lightgrey",
+  padding: grid,
+  width: 250,
 });
 
 class TestDnD extends Component {
   state = {
-    results: [],
-    items: [
-      {
-        lead: {
-          username: "",
-        },
-        follow: {
-          username: "",
-        },
-      },
-    ],
+    items: getItems(10),
+    selected: getItems(5, 10),
   };
 
-  componentDidMount() {
-    axios({
-      method: "GET",
-      url: "/api/score/1",
-    })
-      .then(response => {
-        console.log(response);
+  /**
+   * A semi-generic way to handle multiple lists. Matches
+   * the IDs of the droppable container to the names of the
+   * source arrays stored in the state.
+   */
+  id2List = {
+    droppable: "items",
+    droppable2: "selected",
+  };
 
-        this.setState({
-          items: response.data,
-        });
-      })
-      .catch(error => {
-        alert("Something went wrong getting the couples from the server.");
-        console.log(error);
-      });
-  }
+  getList = id => this.state[this.id2List[id]];
 
   onDragEnd = result => {
+    const { source, destination } = result;
+
     // dropped outside the list
-    if (!result.destination) {
+    if (!destination) {
       return;
     }
 
-    const items = reorder(
-      this.state.items,
-      result.source.index,
-      result.destination.index
-    );
+    if (source.droppableId === destination.droppableId) {
+      const items = reorder(
+        this.getList(source.droppableId),
+        source.index,
+        destination.index
+      );
 
-    this.setState({
-      items,
-    });
-  };
+      let state = { items };
 
-  handleSubmit = () => {
-    axios({
-      method: "POST",
-      url: "/api/score",
-      data: this.state.items,
-    })
-      .then(() => {
-        alert("Rankings submitted successfully!");
-      })
-      .catch(error => {
-        alert("Something went wrong submitting rankings.");
+      if (source.droppableId === "droppable2") {
+        state = { selected: items };
+      }
+
+      this.setState(state);
+    } else {
+      const result = move(
+        this.getList(source.droppableId),
+        this.getList(destination.droppableId),
+        source,
+        destination
+      );
+
+      this.setState({
+        items: result.droppable,
+        selected: result.droppable2,
       });
+    }
   };
 
-  handleGetResults = () => {
-    let competitionToGet = 1;
-
-    axios({
-      method: "GET",
-      url: `/api/score/results/${competitionToGet}`,
-    })
-      .then(response => {
-        console.log(response.data);
-        this.setState({ results: response.data });
-      })
-      .catch(error => {
-        alert("Something went wrong getting the final results.");
-        console.log(error);
-      });
-  };
-
+  // Normally you would want to split things out into separate components.
+  // But in this example everything is just done in one place for simplicity
   render() {
+    const { classes } = this.props;
     return (
-      <div>
-        <NavbarSpacer />
-        <Typography variant="h5">Place Dancers</Typography>
+      <div className={classes.root}>
         <DragDropContext onDragEnd={this.onDragEnd}>
-          <List>
-            <Droppable droppableId="droppable">
-              {(provided, snapshot) => (
-                <div
-                  ref={provided.innerRef}
-                  style={getListStyle(snapshot.isDraggingOver)}
-                >
-                  {this.state.items.map((item, index) => (
-                    <Draggable
-                      key={item.couple_id}
-                      draggableId={item.id}
-                      index={index}
+          <Grid container spacing={24}>
+            <Grid item xs={6}>
+              <Paper className={classes.paper}>
+                <Droppable droppableId="droppable">
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      style={getListStyle(snapshot.isDraggingOver)}
                     >
-                      {(provided, snapshot) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          {...provided.dragHandleProps}
-                          style={getItemStyle(
-                            snapshot.isDragging,
-                            provided.draggableProps.style
-                          )}
+                      {this.state.items.map((item, index) => (
+                        <Draggable
+                          key={item.id}
+                          draggableId={item.id}
+                          index={index}
                         >
-                          <ListItem button>
-                            <Avatar>
-                              <ImageIcon />
-                            </Avatar>
-                            <Avatar>
-                              <ImageIcon />
-                            </Avatar>
-                            <ListItemText
-                              primary={
-                                item.lead.username +
-                                " + " +
-                                item.follow.username
-                              }
-                              secondary="Cool text could go here"
-                            />
-                          </ListItem>
-                        </div>
-                      )}
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </List>
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              style={getItemStyle(
+                                snapshot.isDragging,
+                                provided.draggableProps.style
+                              )}
+                            >
+                              {item.content}
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              </Paper>
+            </Grid>
+            <Grid item xs={6}>
+              <Paper className={classes.paper}>
+                <Droppable droppableId="droppable2">
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      style={getListStyle(snapshot.isDraggingOver)}
+                    >
+                      {this.state.selected.map((item, index) => (
+                        <Draggable
+                          key={item.id}
+                          draggableId={item.id}
+                          index={index}
+                        >
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              style={getItemStyle(
+                                snapshot.isDragging,
+                                provided.draggableProps.style
+                              )}
+                            >
+                              {item.content}
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              </Paper>
+            </Grid>
+          </Grid>
         </DragDropContext>
-        <Button onClick={this.handleSubmit}>Submit Rankings</Button>
-        <Button onClick={this.handleGetResults}>Get Results</Button>
-        <pre>{JSON.stringify(this.state, null, 2)}</pre>
       </div>
+      // <DragDropContext onDragEnd={this.onDragEnd}>
+      //   <Droppable droppableId="droppable">
+      //     {(provided, snapshot) => (
+      //       <div
+      //         ref={provided.innerRef}
+      //         style={getListStyle(snapshot.isDraggingOver)}
+      //       >
+      //         {this.state.items.map((item, index) => (
+      //           <Draggable key={item.id} draggableId={item.id} index={index}>
+      //             {(provided, snapshot) => (
+      //               <div
+      //                 ref={provided.innerRef}
+      //                 {...provided.draggableProps}
+      //                 {...provided.dragHandleProps}
+      //                 style={getItemStyle(
+      //                   snapshot.isDragging,
+      //                   provided.draggableProps.style
+      //                 )}
+      //               >
+      //                 {item.content}
+      //               </div>
+      //             )}
+      //           </Draggable>
+      //         ))}
+      //         {provided.placeholder}
+      //       </div>
+      //     )}
+      //   </Droppable>
+      //   <Droppable droppableId="droppable2">
+      //     {(provided, snapshot) => (
+      //       <div
+      //         ref={provided.innerRef}
+      //         style={getListStyle(snapshot.isDraggingOver)}
+      //       >
+      //         {this.state.selected.map((item, index) => (
+      //           <Draggable key={item.id} draggableId={item.id} index={index}>
+      //             {(provided, snapshot) => (
+      //               <div
+      //                 ref={provided.innerRef}
+      //                 {...provided.draggableProps}
+      //                 {...provided.dragHandleProps}
+      //                 style={getItemStyle(
+      //                   snapshot.isDragging,
+      //                   provided.draggableProps.style
+      //                 )}
+      //               >
+      //                 {item.content}
+      //               </div>
+      //             )}
+      //           </Draggable>
+      //         ))}
+      //         {provided.placeholder}
+      //       </div>
+      //     )}
+      //   </Droppable>
+      // </DragDropContext>
     );
   }
 }
 
-// Put the thing into the DOM!
-export default TestDnD;
+TestDnD.propTypes = {
+  classes: PropTypes.object.isRequired,
+};
+
+export default withStyles(styles)(TestDnD);
